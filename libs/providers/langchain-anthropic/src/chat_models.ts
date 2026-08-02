@@ -72,6 +72,8 @@ import {
   createFunctionCallingParser,
 } from "@langchain/core/language_models/structured_output";
 
+const MCP_CREDENTIALS_REDACTED = "**REDACTED**";
+
 // Default max output tokens per model family (prefix-matched).
 // These are sensible defaults for the `max_tokens` API parameter when
 // the user does not explicitly set `maxTokens`. Values are based on the
@@ -84,6 +86,7 @@ const MODEL_DEFAULT_MAX_OUTPUT_TOKENS: Partial<
   Record<Anthropic.Model, number>
 > = {
   // Claude 5 — 128K max output
+  "claude-opus-5": 16384,
   "claude-fable-5": 16384,
   "claude-mythos-5": 16384,
   "claude-mythos-preview": 16384,
@@ -1281,6 +1284,7 @@ export class ChatAnthropicMessages<
     validateInvocationParamCompatibility({
       model: this.model,
       thinking: this.thinking,
+      outputConfig: mergedOutputConfig,
       topK: this.topK,
       topP: this.topP,
       temperature: this.temperature,
@@ -1298,6 +1302,48 @@ export class ChatAnthropicMessages<
     );
 
     return output;
+  }
+
+  protected override _getInvocationParamsForTracing(
+    options?: this["ParsedCallOptions"]
+  ): ReturnType<this["invocationParams"]> {
+    const params = this.invocationParams(options);
+    if (!Array.isArray(params.mcp_servers)) {
+      return params;
+    }
+    return {
+      ...params,
+      mcp_servers: params.mcp_servers.map((server) => {
+        if (!("authorization_token" in server)) {
+          return server;
+        }
+        return {
+          ...server,
+          authorization_token: MCP_CREDENTIALS_REDACTED,
+        };
+      }),
+    };
+  }
+
+  protected override _getCallOptionsForTracing(
+    options: this["ParsedCallOptions"],
+    _invocationParams: ReturnType<this["invocationParams"]>
+  ): this["ParsedCallOptions"] {
+    if (!Array.isArray(options.mcp_servers)) {
+      return options;
+    }
+    return {
+      ...options,
+      mcp_servers: options.mcp_servers.map((server) => {
+        if (!("authorization_token" in server)) {
+          return server;
+        }
+        return {
+          ...server,
+          authorization_token: MCP_CREDENTIALS_REDACTED,
+        };
+      }),
+    };
   }
 
   /** @ignore */
